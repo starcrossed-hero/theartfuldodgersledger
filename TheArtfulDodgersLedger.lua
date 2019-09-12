@@ -16,7 +16,6 @@ local PICKPOCKET_TIMESTAMP = 0
 local PICKPOCKET_ERROR = false
 local PICKPOCKET_READY = false
 local PICKPOCKET_LOOTED = false
-local STEALTH_AURA_REMOVED = false
 
 local LOOT_CLEARED_COUNT = 0
 local LOOT_READY_ITEMS = {}
@@ -45,7 +44,6 @@ function TheArtfulDodgersLedger:Reset()
 	PICKPOCKET_ERROR = false
 	PICKPOCKET_READY = false
 	PICKPOCKET_LOOTED = false
-	STEALTH_AURA_REMOVED = false
 	LOOT_READY_ITEMS = {}
 	LOOT_CLEARED_COUNT = 0
 end
@@ -63,31 +61,29 @@ end
 
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
 	local timestamp, subEvent, _, _, sourceName, _, _, _, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
-    if sourceName == UnitName("player") and subEvent == "SPELL_CAST_SUCCESS" and spellName == "Pick Pocket" then
+    if self:IsPickpocketEvent(sourceName, subEvent, spellName) then
+		self:Reset()
         PICKPOCKET_ACTIVE = true
 		PICKPOCKET_TIMESTAMP = time()
-		PICKPOCKET_ERROR = false
-		PICKPOCKET_LOOTED = false
-	end
-	if PICKPOCKET_ACTIVE == true and sourceName == UnitName("player") and subEvent == "SPELL_AURA_REMOVED" and spellName == "Stealth" then
-		STEALTH_AURA_REMOVED = true
 	end
 end
 
+function TheArtfulDodgersLedger:IsPickpocketEvent(sourceName, subEvent, spellName)
+	if sourceName == UnitName("player") and subEvent == "SPELL_CAST_SUCCESS" and spellName == "Pick Pocket" then
+		return true
+	end
+	return false
+end
+
 function TheArtfulDodgersLedger:UI_ERROR_MESSAGE(event, errorType, message)
-	if message == 'Your target has already had its pockets picked' 
-        or 'Target has no pockets to pick' 
-        or 'No pockets to pick' 
-        or 'Invalid Target'
-		or 'Resist'
-    then
+	if message == ERR_ALREADY_PICKPOCKETED or message == SPELL_FAILED_TARGET_NO_POCKETS then
 		self:Reset()
 	end
 end
 
 function TheArtfulDodgersLedger:LOOT_READY(event, slot)
+	local epochTime = time()
 	if PICKPOCKET_ACTIVE == true then
-		local epochTime = time()
 		for i = 1, GetNumLootItems() do
 			local lootIcon, lootName, lootAmount, lootRarity = GetLootSlotInfo(i)
 			local currencyValue = self:GetCopperFromLootName(lootName)
@@ -96,11 +92,12 @@ function TheArtfulDodgersLedger:LOOT_READY(event, slot)
 				lootName = "Currency"
 				lootPrice = currencyValue
 			end
-			print(event, epochTime, PICKPOCKET_TIMESTAMP, lootName, lootPrice)
 			if self:PickpocketLootItemsContains(lootName, epochTime) == false then
 				table.insert(LOOT_READY_ITEMS, {timestamp=epochTime, icon=lootIcon, name=lootName, amount=lootAmount, rarity=lootRarity, price=lootPrice})
-				table.sort(LOOT_READY_ITEMS, function(a,b) return a.timestamp < b.timestamp end)
 			end
+		end
+		if UnitAffectingCombat('player')== true and (epochTime - PICKPOCKET_TIMESTAMP) < 3 then
+			self:EndPickpocketEvent()
 		end
 	end
 end
@@ -115,31 +112,29 @@ function TheArtfulDodgersLedger:LOOT_SLOT_CLEARED(event, slot)
 end
 
 function TheArtfulDodgersLedger:CHAT_MSG_MONEY(event, message)
-	print(event, message, time())
-	--if PICKPOCKET_ACTIVE == true and (PICKPOCKET_LOOTED == true or STEALTH_AURA_REMOVED == true or UnitAffectingCombat("player") == true or PICKPOCKET_READY == true) then
+	if PICKPOCKET_ACTIVE == true and PICKPOCKET_LOOTED == true then
+		self:EndPickpocketEvent()
+	end
+end
+
+function TheArtfulDodgersLedger:EndPickpocketEvent()
+	print("EndPickPocketEvent")
 	local itemCopper = self:GetItemSellValueTotal()	
 	self:AddToLootedCopper(itemCopper)
 	self:AddToLootedCounts(1)
 	self:Reset()	
 	self:PrettyPrintSessionLooted()
-	--end
 end
 
 function TheArtfulDodgersLedger:GetItemSellValueTotal()
 	local totalCopper = 0
-	print(table.getn(LOOT_READY_ITEMS))
 	for i = 1, table.getn(LOOT_READY_ITEMS) do
-		print(LOOT_READY_ITEMS[i].timestamp, LOOT_READY_ITEMS[1].timestamp)
 		if LOOT_READY_ITEMS[i].timestamp == LOOT_READY_ITEMS[1].timestamp then
 			totalCopper = totalCopper + LOOT_READY_ITEMS[i].price or 0
 		end
 	end
 	
 	return totalCopper
-end
-
-function TheArtfulDodgersLedger:SortLootReadyItems()
-	table.sort(LOOT_READY_ITEMS, function(a,b) return a.timestamp < b.timestamp end)
 end
 
 function TheArtfulDodgersLedger:AddToLootedCounts(count)
@@ -153,16 +148,31 @@ function TheArtfulDodgersLedger:AddToLootedCopper(totalCopper)
 end
 
 function TheArtfulDodgersLedger:PrettyPrintGlobalLooted()
-	print("Your historic pilfering has increased your stash by ", GetCoinTextureString(GLOBAL_LOOTED_COPPER), ". You've pick pocketed from ", GLOBAL_LOOTED_COUNT, " marks, taking an average of ", GetCoinTextureString(math.floor(GLOBAL_LOOTED_COPPER / GLOBAL_LOOTED_COUNT)), " from each.")
+	print(self:GetPrettyPrintString("historic", "stash", GetCoinTextureString(GLOBAL_LOOTED_COPPER), GLOBAL_LOOTED_COUNT, GetCoinTextureString(self:GetGlobalAverage())))
 end
 
 function TheArtfulDodgersLedger:PrettyPrintSessionLooted()
-	print("Your current pilfering has increased your stash by ", GetCoinTextureString(SESSION_LOOTED_COPPER), ". You've pick pocketed from ", SESSION_LOOTED_COUNT, " marks, taking an average of ", GetCoinTextureString(math.floor(SESSION_LOOTED_COPPER / SESSION_LOOTED_COUNT)), " from each.")
+	print(self:GetPrettyPrintString("current", "purse", GetCoinTextureString(SESSION_LOOTED_COPPER), SESSION_LOOTED_COUNT, GetCoinTextureString(self:GetSessionAverage())))
+end
+
+function TheArtfulDodgersLedger:GetPrettyPrintString(period, store, copper, count, average)
+	return string.format("Your %s pilfering has increased your %s by %s. You've pick pocketed from %d mark(s) and stolen an average of %s from each victim.", period, store, copper, count, average)
+end
+
+function TheArtfulDodgersLedger:GetSessionAverage()
+	return self:Round((SESSION_LOOTED_COPPER / SESSION_LOOTED_COUNT))
+end
+
+function TheArtfulDodgersLedger:GetGlobalAverage()
+	return self:Round((GLOBAL_LOOTED_COPPER / GLOBAL_LOOTED_COUNT))
+end
+
+function TheArtfulDodgersLedger:Round(x)
+	return x + 0.5 - (x + 0.5) % 1
 end
 
 function TheArtfulDodgersLedger:PickpocketLootItemsContains(key, timestamp)
 	for i = 1, table.getn(LOOT_READY_ITEMS) do
-		print("Contains", key, LOOT_READY_ITEMS[i].name, timestamp, LOOT_READY_ITEMS[i].timestamp)
 		if LOOT_READY_ITEMS[i].name == key and LOOT_READY_ITEMS[i].timestamp == timestamp then
 			return true
 		end
