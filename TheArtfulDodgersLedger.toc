@@ -5,7 +5,7 @@
 ## OptionalDeps: Ace3
 ## X-Embeds: Ace3
 ## Author: starcrossed-hero
-## Version: 0.7
+## Version: 0.8
 
 embeds.xml
 TheArtfulDodgersLedger.lua
