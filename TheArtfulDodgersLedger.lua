@@ -19,19 +19,34 @@ local PICKPOCKET_READY = false
 local PICKPOCKET_LOOTED = false
 local PICKPOCKET_EVENT = {
 							active=false, 
+							looted=false,
+							lootCount=0,
 							timestamp=0,
-							mark=""
+							mark="",
+							zone="",
+							subZone=""
 						 }
 
 local LOOT_CLEARED_COUNT = 0
 local LOOT_READY_ITEMS = {}
 
+local CURRENCY_COLOR = "|cFFCC9900"
+local CURRENCY_STRING = "Coin"
+local CURRENCY_LINK = CURRENCY_COLOR.."["..CURRENCY_STRING.."]|r"
+local CURRENCY_ICON_ID = 11966
+
+local LOOT_TOTAL_STRING = "Pilfered coins:  %s"
+local LOOT_MARKS_STRING = "Pockets picked:  %d"
+local LOOT_AVERAGE_STRING = "Average per mark:  %s"
+
+local DATE_FORMAT = "%b. %d - %I:%M %p"
+
 function TheArtfulDodgersLedger:OnEnable()
 	self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 	self:RegisterEvent("UI_ERROR_MESSAGE")
 	self:RegisterEvent("LOOT_READY")
-	self:RegisterEvent("LOOT_SLOT_CLEARED")
-	self:RegisterEvent("CHAT_MSG_MONEY")
+	--self:RegisterEvent("LOOT_SLOT_CLEARED")
+	--self:RegisterEvent("CHAT_MSG_MONEY")
 end
 
 function TheArtfulDodgersLedger:OnDisable()
@@ -43,7 +58,7 @@ function TheArtfulDodgersLedger:ShowFrame()
 	frame:SetTitle("The Artful Dodger's Ledger")
 	frame:SetCallback("OnClose", function(widget) AceGUI:Release(widget) end)
 	frame:SetLayout("Flow")
-	
+
 	local header = AceGUI:Create("Heading")
 	header:SetText("Total Accounting")
 	header:SetRelativeWidth(1)
@@ -51,48 +66,74 @@ function TheArtfulDodgersLedger:ShowFrame()
 	
 	scrollcontainer = AceGUI:Create("SimpleGroup")
 	scrollcontainer:SetFullWidth(true)
-	scrollcontainer:SetFullHeight(true)
 	scrollcontainer:SetLayout("Fill")
+	scrollcontainer:SetPoint("TOP")
 
-	--frame:AddChild(scrollcontainer)
+	frame:AddChild(scrollcontainer)
 
 	scroll = AceGUI:Create("ScrollFrame")
 	scroll:SetLayout("Flow")
-	--scrollcontainer:AddChild(scroll)
+	scrollcontainer:AddChild(scroll)
 	
-	for i = 1, table.getn(GLOBAL_LOOTED_HISTORY) do
-		for x = 1, table.getn(GLOBAL_LOOTED_HISTORY[i].loot) do
-			local label = AceGUI:Create("Label")
-			if GLOBAL_LOOTED_HISTORY[i].loot[x].icon ~= nil then
-				print("setimage", GLOBAL_LOOTED_HISTORY[i].icon)
-				label:SetImage(GetItemIcon(GLOBAL_LOOTED_HISTORY[i].loot[x].icon))
+	for event = 1, table.getn(GLOBAL_LOOTED_HISTORY) do
+		local eventTime, mark, zone, subZone, loot = self:GetLootedHistoryEvent(event)
+		for item = 1, table.getn(loot) do
+			local label = AceGUI:Create("InteractiveLabel")
+			local _, icon, name, link, quantity, _, price = self:GetLootedHistoryEventItem(loot, item)
+			if icon ~= nil then
+				label:SetImage(GetItemIcon(icon))
 			else
-				label:SetImage(GetItemIcon(11966))
+				label:SetImage(GetItemIcon(CURRENCY_ICON_ID))
 			end
-			label:SetText(GLOBAL_LOOTED_HISTORY[i].loot[x].name.." - "..GLOBAL_LOOTED_HISTORY[i].loot[x].quantity.." - "..GLOBAL_LOOTED_HISTORY[i].loot[x].price.." - "..GLOBAL_LOOTED_HISTORY[i].timestamp.." - "..GLOBAL_LOOTED_HISTORY[i].mark)
-			frame:AddChild(label)
+			local priceString = price
+			if priceString ~= nil then
+				priceString = GetCoinTextureString(price)
+			end
+			label:SetText(date(DATE_FORMAT, eventTime).."|  "..zone.." - "..subZone.."   "..mark.."   "..link.."   "..quantity.."   "..priceString)
+			label:SetFullWidth(true)
+			label:SetPoint("CENTER")
+			scroll:AddChild(label)
 		end
 	end
 	
+	totalContainer = AceGUI:Create("SimpleGroup")
+	totalContainer:SetFullWidth(true)
+	totalContainer:SetLayout("Flow")
+	frame:AddChild(totalContainer)
+	
 	local globalLabel = AceGUI:Create("Label")
-	globalLabel:SetText(self:GetPrettyPrintGlobalLootedString())
-	frame:AddChild(globalLabel)
+	globalLabel:SetText(string.format(LOOT_TOTAL_STRING, GetCoinTextureString(GLOBAL_LOOTED_COPPER)))
+	totalContainer:AddChild(globalLabel)
 	
 	local sessionLabel = AceGUI:Create("Label")
-	sessionLabel:SetText(self:GetPrettyPrintSessionLootedString())
-	frame:AddChild(sessionLabel)
+	sessionLabel:SetText(string.format(LOOT_MARKS_STRING, GLOBAL_LOOTED_COUNT))
+	totalContainer:AddChild(sessionLabel)
+	
+	local averageLabel = AceGUI:Create("Label")
+	averageLabel:SetText(string.format(LOOT_AVERAGE_STRING, GetCoinTextureString(self:GetGlobalAverage())))
+	totalContainer:AddChild(averageLabel)
+	
+	local controlContainer = AceGUI:Create("SimpleGroup")
+	controlContainer:SetFullWidth(true)
+	controlContainer:SetLayout("Flow")
+	frame:AddChild(controlContainer)
 	
 	local resetButton = AceGUI:Create("Button")
 	resetButton:SetText("Reset All Stats")
 	resetButton:SetWidth(200)
-	frame:AddChild(resetButton)
-	
-	local icon = AceGUI:Create("Icon")
-	icon:SetImage(GetItemIcon(4544))
-	frame:AddChild(icon)
+	controlContainer:AddChild(resetButton)
+end
+
+function TheArtfulDodgersLedger:GetLootedHistoryEvent(eventIndex)
+	return GLOBAL_LOOTED_HISTORY[eventIndex].timestamp, GLOBAL_LOOTED_HISTORY[eventIndex].mark, GLOBAL_LOOTED_HISTORY[eventIndex].zone, GLOBAL_LOOTED_HISTORY[eventIndex].subZone, GLOBAL_LOOTED_HISTORY[eventIndex].loot
+end
+
+function TheArtfulDodgersLedger:GetLootedHistoryEventItem(loot, lootIndex)
+	return loot[lootIndex].timestamp, loot[lootIndex].icon, loot[lootIndex].name, loot[lootIndex].link, loot[lootIndex].quantity, loot[lootIndex].quality, loot[lootIndex].price
 end
 
 function TheArtfulDodgersLedger:ResetLoot()
+	LOOT_READY_ITEMS = {}
 	GLOBAL_LOOTED_HISTORY = {}
     GLOBAL_LOOTED_COPPER = 0
 	GLOBAL_LOOTED_COUNT = 0
@@ -108,9 +149,13 @@ function TheArtfulDodgersLedger:Reset()
 	LOOT_READY_ITEMS = {}
 	LOOT_CLEARED_COUNT = 0
 	local PICKPOCKET_EVENT = {
-							active=false, 
+							active=false,
+							looted=false,
+							lootCount=0,
 							timestamp=0,
-							mark=""
+							mark="",
+							zone="",
+							subZone=""
 						 }
 end
 
@@ -137,6 +182,9 @@ function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
 		PICKPOCKET_EVENT.active = true
 		PICKPOCKET_EVENT.timestamp = time()
 		PICKPOCKET_EVENT.mark = destName
+		PICKPOCKET_EVENT.zone = GetRealZoneText()
+		PICKPOCKET_EVENT.subZone = GetSubZoneText()
+		print(PICKPOCKET_TIMESTAMP, sourceName, subEvent, spellName)
 	end
 end
 
@@ -148,58 +196,68 @@ function TheArtfulDodgersLedger:IsPickpocketEvent(sourceName, subEvent, spellNam
 end
 
 function TheArtfulDodgersLedger:UI_ERROR_MESSAGE(event, errorType, message)
-	if message == ERR_ALREADY_PICKPOCKETED or message == SPELL_FAILED_TARGET_NO_POCKETS then
+	if message == ERR_ALREADY_PICKPOCKETED or message == SPELL_FAILED_TARGET_NO_POCKETS or message == RESIST then
+		print(PICKPOCKET_TIMESTAMP, event, errorType, message)
 		self:Reset()
 	end
 end
 
 function TheArtfulDodgersLedger:LOOT_READY(event, slot)
 	local epochTime = time()
-	if PICKPOCKET_ACTIVE == true then
+	if PICKPOCKET_EVENT.active == true then
 		for i = 1, GetNumLootItems() do
 			local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(i)
 			local currencyValue = self:GetCopperFromLootName(lootName)
-			local lootPrice = select(11, GetItemInfo(lootName))
-			local thing = select(2, GetItemInfo(lootName))
-			if thing ~= nil then
-				print(lootIcon, thing)
-				lootIcon = tonumber(strmatch(thing, "item:(%d+)"))
+			local lootPrice = select(11, GetItemInfo(lootName)) or 0
+			local lootLink = select(2, GetItemInfo(lootName))
+			if lootLink ~= nil then
+				lootIcon = tonumber(strmatch(lootLink, "item:(%d+)"))
 			else
-				lootIcon = 11966
+				lootLink = ""
 			end
-			print(lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive)
 			if currencyValue > 0 then
-				lootName = "Currency"
+				lootName = CURRENCY_STRING
+				lootIcon = CURRENCY_ICON_ID
+				lootQuantity = 1
 				lootPrice = currencyValue
+				lootLink = CURRENCY_LINK
 			end
-			if self:PickpocketLootItemsContains(lootName, epochTime) == false then
-				table.insert(LOOT_READY_ITEMS, {timestamp=epochTime, icon=lootIcon, name=lootName, quantity=lootQuantity, quality=lootQuality, price=lootPrice})
-			end
+			--if self:PickpocketLootItemsContains(lootName, epochTime) == false then
+			print(event, "insert", epochTime, lootName)
+			table.insert(LOOT_READY_ITEMS, {timestamp=epochTime, icon=lootIcon, name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, price=lootPrice})
+			--end
 		end
-		if UnitAffectingCombat('player')== true and (epochTime - PICKPOCKET_TIMESTAMP) < 3 then
-			self:EndPickpocketEvent()
-		end
+		PICKPOCKET_EVENT.active = false
+		self:EndPickpocketEvent()
+		--if UnitAffectingCombat('player')== true and self:FuzzyMatchingTimestamp(epochTime, PICKPOCKET_EVENT.timestamp) == true then
+		--	PICKPOCKET_EVENT.active = false
+		--	self:EndPickpocketEvent()
+		--end
 	end
 end
 
 function TheArtfulDodgersLedger:LOOT_SLOT_CLEARED(event, slot)
-	if PICKPOCKET_ACTIVE == true then
-		LOOT_CLEARED_COUNT = LOOT_CLEARED_COUNT + 1
-		if GetNumLootItems() == LOOT_CLEARED_COUNT then 
-			PICKPOCKET_LOOTED = true
+	if PICKPOCKET_EVENT.active == true then
+		PICKPOCKET_EVENT.lootCount = PICKPOCKET_EVENT.lootCount + 1
+		if GetNumLootItems() == PICKPOCKET_EVENT.lootCount then 
+			print(event, slot, "PICKPOCKET_LOOTED", "count=", PICKPOCKET_EVENT.lootCount)
+			PICKPOCKET_EVENT.looted = true
 		end
 	end
 end
 
 function TheArtfulDodgersLedger:CHAT_MSG_MONEY(event, message)
-	if PICKPOCKET_ACTIVE == true and PICKPOCKET_LOOTED == true then
+	if PICKPOCKET_EVENT.active == true and PICKPOCKET_EVENT.looted == true then
+		print(event, message, "PICKPOCKET_ACTIVE AND LOOTED")
 		self:EndPickpocketEvent()
 	end
 end
 
 function TheArtfulDodgersLedger:EndPickpocketEvent()
+	print("endpickpocket", PICKPOCKET_EVENT.timestamp, PICKPOCKET_EVENT.mark)
 	local itemCopper = self:GetItemSellValueTotal()
-	table.insert(GLOBAL_LOOTED_HISTORY, {timestamp=PICKPOCKET_EVENT.timestamp, mark=PICKPOCKET_EVENT.mark, loot=LOOT_READY_ITEMS})
+	table.insert(GLOBAL_LOOTED_HISTORY, {timestamp=PICKPOCKET_EVENT.timestamp, mark=PICKPOCKET_EVENT.mark, zone=PICKPOCKET_EVENT.zone, subZone=PICKPOCKET_EVENT.subZone, loot=LOOT_READY_ITEMS})
+	self:SortGlobalLootedHistoryTable()
 	self:AddToLootedCopper(itemCopper)
 	self:AddToLootedCounts(1)
 	self:Reset()
@@ -208,12 +266,18 @@ end
 function TheArtfulDodgersLedger:GetItemSellValueTotal()
 	local totalCopper = 0
 	for i = 1, table.getn(LOOT_READY_ITEMS) do
-		if LOOT_READY_ITEMS[i].timestamp == LOOT_READY_ITEMS[1].timestamp and LOOT_READY_ITEMS[i].price ~= nil then
+		local timestamp = LOOT_READY_ITEMS[i].timestamp
+		if timestamp ~= nil and self:FuzzyMatchingTimestamp(timestamp, PICKPOCKET_EVENT.timestamp) then
+			print("Adding: ", LOOT_READY_ITEMS[i].name, LOOT_READY_ITEMS[i].price)
 			totalCopper = totalCopper + LOOT_READY_ITEMS[i].price
 		end
 	end
 	
 	return totalCopper
+end
+
+function TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
+	table.sort(GLOBAL_LOOTED_HISTORY, function(a,b) return a.timestamp > b.timestamp end)
 end
 
 function TheArtfulDodgersLedger:AddToLootedCounts(count)
@@ -257,9 +321,16 @@ function TheArtfulDodgersLedger:Round(x)
 	return x + 0.5 - (x + 0.5) % 1
 end
 
+function TheArtfulDodgersLedger:FuzzyMatchingTimestamp(timestamp1, timestamp2)
+	return math.abs((tonumber(timestamp1) - tonumber(timestamp2))) < 2
+end
+
 function TheArtfulDodgersLedger:PickpocketLootItemsContains(key, timestamp)
-	for i = 1, table.getn(LOOT_READY_ITEMS) do
-		if LOOT_READY_ITEMS[i].name == key and LOOT_READY_ITEMS[i].timestamp == timestamp then
+	for item = 1, table.getn(LOOT_READY_ITEMS) do
+		local itemName = LOOT_READY_ITEMS[item].name
+		local itemTimestamp = LOOT_READY_ITEMS[item].timestamp
+		if itemName == key and self:FuzzyMatchingTimestamp(timestamp, itemTimestamp) then
+			print("true")
 			return true
 		end
 	end
