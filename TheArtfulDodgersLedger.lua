@@ -58,6 +58,33 @@ end
 
 local CURRENT_EVENT = {}
 
+function TheArtfulDodgersLedger:OnInitialize()
+	self:RegisterChatCommand('adl', "ChatCommand")
+	if GLOBAL_LOOTED_COPPER == nil then
+		GLOBAL_LOOTED_COPPER = 0
+	end
+	if GLOBAL_LOOTED_COUNT == nil then
+		GLOBAL_LOOTED_COUNT = 0
+	end
+	if GLOBAL_LOOTED_HISTORY == nil then
+		GLOBAL_LOOTED_HISTORY = {}
+	end
+	self.db = LibStub("AceDB-3.0"):New("TheArtfulDodgersLedgerDB")
+    self.db.char.totalLootedCount = GLOBAL_LOOTED_COUNT
+    self.db.char.sessionLootedCount = SESSION_LOOTED_COUNT
+    self.db.char.totalLootedCopper = GLOBAL_LOOTED_COPPER
+    self.db.char.sessionLootedCopper = SESSION_LOOTED_COPPER
+    self.db.char.pickPocketHistory = GLOBAL_LOOTED_HISTORY
+    self.db.char.minimap = {}
+    self.db.char.minimap.visible = false
+    --if self.db.char.totalLootedCount == nil then
+    --    self.db.char.totalLootedCount = 0
+   -- end
+   -- if self.db.char.sessionLootedCount == nil then
+   --     self.db.char.sessionLootedCount = 0
+   -- end
+end
+
 function TheArtfulDodgersLedger:OnEnable()
 	self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 	self:RegisterEvent("UI_ERROR_MESSAGE")
@@ -86,9 +113,17 @@ function TheArtfulDodgersLedger:InTable(tbl, item)
 end
 
 function TheArtfulDodgersLedger:ShowFrame()
+    
+    if self.db.char.minimap.visible == true then
+        return
+    end
+    
 	local frame = AceGUI:Create("Frame")
 	frame:SetTitle("The Artful Dodger's Ledger")
-	frame:SetCallback("OnClose", function(widget) AceGUI:Release(widget) end)
+	frame:SetCallback("OnClose", function(widget)
+            self.db.char.minimap.visible = false
+            AceGUI:Release(widget)
+        end)
 	frame:SetLayout("Flow")
     frame:SetHeight(600)
 
@@ -234,6 +269,8 @@ function TheArtfulDodgersLedger:ShowFrame()
 	resetButton:SetText("Reset All Stats")
 	resetButton:SetWidth(200)
 	totalContainer:AddChild(resetButton)
+    
+    self.db.char.minimap.visible = true
 end
 
 function TheArtfulDodgersLedger:GetLootedHistoryEvent(eventIndex)
@@ -259,20 +296,6 @@ function TheArtfulDodgersLedger:Reset()
 	CURRENT_EVENT = PickPocketEvent:New()
 end
 
-function TheArtfulDodgersLedger:OnInitialize()
-	self:RegisterChatCommand('adl', "ChatCommand")
-	if GLOBAL_LOOTED_COPPER == nil then
-		GLOBAL_LOOTED_COPPER = 0
-	end
-	if GLOBAL_LOOTED_COUNT == nil then
-		GLOBAL_LOOTED_COUNT = 0
-	end
-	if GLOBAL_LOOTED_HISTORY == nil then
-		GLOBAL_LOOTED_HISTORY = {}
-	end
-	CreateFrame("FRAME", testframe, UIParent)
-end
-
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
 	local timestamp, subEvent, _, _, sourceName, _, _, _, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
 	if self:IsPickPocketEvent(sourceName, subEvent, spellName) then
@@ -289,6 +312,7 @@ function TheArtfulDodgersLedger:IsPickPocketEvent(sourceName, subEvent, spellNam
 end
 
 function TheArtfulDodgersLedger:UI_ERROR_MESSAGE(event, errorType, message)
+    print(CURRENT_EVENT.timestamp, CURRENT_EVENT.state, event, errorType, message)
 	if message == ERR_ALREADY_PICKPOCKETED or message == SPELL_FAILED_TARGET_NO_POCKETS or message == RESIST then
 		CURRENT_EVENT.state = EVENT_STATE.ERROR
 		print(CURRENT_EVENT.timestamp, CURRENT_EVENT.state, event, errorType, message)
@@ -327,6 +351,7 @@ function TheArtfulDodgersLedger:EndPickpocketEvent()
 	local itemCopper = self:GetItemSellValueTotal()
 	print(CURRENT_EVENT:ToString())
 	table.insert(GLOBAL_LOOTED_HISTORY, {timestamp=CURRENT_EVENT.timestamp, mark=CURRENT_EVENT.mark, zone=CURRENT_EVENT.zone, subZone=CURRENT_EVENT.subZone, loot=LOOT_READY_ITEMS})
+    table.insert(self.db.char.pickPocketHistory, {timestamp=CURRENT_EVENT.timestamp, mark=CURRENT_EVENT.mark, zone=CURRENT_EVENT.zone, subZone=CURRENT_EVENT.subZone, loot=LOOT_READY_ITEMS})
 	self:SortGlobalLootedHistoryTable()
 	self:AddToLootedCopper(itemCopper)
 	self:AddToLootedCounts(1)
@@ -346,15 +371,20 @@ end
 function TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
 	table.sort(GLOBAL_LOOTED_HISTORY, function(a,b) return a.timestamp > b.timestamp end)
 end
-
+ 
 function TheArtfulDodgersLedger:AddToLootedCounts(count)
 	GLOBAL_LOOTED_COUNT = GLOBAL_LOOTED_COUNT + count
 	SESSION_LOOTED_COUNT = SESSION_LOOTED_COUNT + count
+    self.db.char.totalLootedCount = GLOBAL_LOOTED_COUNT
+    self.db.char.sessionLootedCount = SESSION_LOOTED_COUNT
+    print("totalLootedCount: "..self.db.char.totalLootedCount, "sessionLootedCount: "..self.db.char.sessionLootedCount)
 end
 
 function TheArtfulDodgersLedger:AddToLootedCopper(totalCopper)
 	GLOBAL_LOOTED_COPPER = GLOBAL_LOOTED_COPPER + totalCopper
 	SESSION_LOOTED_COPPER = SESSION_LOOTED_COPPER + totalCopper
+    self.db.char.totalLootedCopper = GLOBAL_LOOTED_COPPER
+    self.db.char.sessionLootedCopper = SESSION_LOOTED_COPPER
 end
 
 function TheArtfulDodgersLedger:GetPrettyPrintGlobalLootedString()

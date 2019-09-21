@@ -2,6 +2,7 @@
 ## Title: The Artful Dodger's Ledger
 ## Notes: Track your accumulation of pilfered goods
 ## SavedVariablesPerCharacter: GLOBAL_LOOTED_COPPER, GLOBAL_LOOTED_COUNT, GLOBAL_LOOTED_HISTORY
+## SavedVariables: TheArtfulDodgersLedgerDB
 ## OptionalDeps: Ace3
 ## X-Embeds: Ace3
 ## Author: starcrossed-hero
@@ -9,3 +10,4 @@
 
 embeds.xml
 TheArtfulDodgersLedger.lua
+MiniMap.lua
