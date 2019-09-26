@@ -32,7 +32,7 @@ ldbDataSourceDisplay:SetScript("OnUpdate", function(self, elapsed)
         UPDATE_FREQUENCY = 2
         if minimap.db then
             dataObject.text = string.format(STATUS_STRING_FORMAT, 
-                minimap.db.stats.session.copper, 
+                GetCoinTextureString(minimap.db.stats.session.copper), 
                 minimap.db.stats.session.marks, 
                 GetCoinTextureString(
                     addon:CalculateAverageCopperPerMark(minimap.db.stats.session.copper, minimap.db.stats.session.count)
@@ -49,9 +49,9 @@ function dataObject:OnClick(button)
 end
 
 function dataObject:OnTooltipShow()
-	self:AddLine("The Artful Dodger's Ledger")
+    self:AddLine("The Artful Dodger's Ledger")
     self:AddLine("")
-    self:AddLine("")
+    self:AddLine(addon:GetPrettyPrintTotalLootedString())
 end
 
 function dataObject:OnEnter()
