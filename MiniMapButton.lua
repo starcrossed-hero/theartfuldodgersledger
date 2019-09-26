@@ -1,7 +1,7 @@
 local addon = LibStub("AceAddon-3.0"):GetAddon("TheArtfulDodgersLedger")
 local gui = addon:GetModule("GUI")
-local miniMapButtonModule = addon:NewModule("MiniMapButton")
-local miniMapButton = LibStub("LibDBIcon-1.0")
+local minimap = addon:NewModule("MiniMapButton")
+local button = LibStub("LibDBIcon-1.0")
 
 local UPDATE_FREQUENCY = 2
 
@@ -19,9 +19,9 @@ local dataObject = LibStub:GetLibrary("LibDataBroker-1.1"):NewDataObject("The Ar
     )
 })
 
-function miniMapButtonModule:OnEnable()
-    self.db = addon.db
-    miniMapButton:Register("The Artful Dodger's Ledger", dataObject, self.db.settings.minimap)
+function minimap:OnEnable()
+    minimap.db = addon.db
+    button:Register("The Artful Dodger's Ledger", dataObject, self.db.settings.minimap)
 	addon:RegisterChatCommand("adl", "Show")
 end
 
@@ -30,12 +30,12 @@ ldbDataSourceDisplay:SetScript("OnUpdate", function(self, elapsed)
     UPDATE_FREQUENCY = UPDATE_FREQUENCY - elapsed
     if UPDATE_FREQUENCY <= 0 then
         UPDATE_FREQUENCY = 2
-        if addon.db then
+        if minimap.db then
             dataObject.text = string.format(STATUS_STRING_FORMAT, 
-                addon.db.stats.session.copper, 
-                addon.db.stats.session.marks, 
+                minimap.db.stats.session.copper, 
+                minimap.db.stats.session.marks, 
                 GetCoinTextureString(
-                    addon:CalculateAverageCopperPerMark(addon.db.stats.session.copper, addon.db.stats.session.count)
+                    addon:CalculateAverageCopperPerMark(minimap.db.stats.session.copper, minimap.db.stats.session.count)
                 )
             )
         end
@@ -66,10 +66,10 @@ function dataObject:OnLeave()
 	GameTooltip:Hide()
 end
 
-function miniMapButton:OnClick(button)
+function button:OnClick(button)
     if button == "LeftButton" then
         gui:ShowFrame()
     elseif button == "RightButton" then
-        miniMapButton:Hide("The Artful Dodger's Ledger")
+        button:Hide("The Artful Dodger's Ledger")
     end
 end

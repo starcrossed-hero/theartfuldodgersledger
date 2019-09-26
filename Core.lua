@@ -29,8 +29,6 @@ local defaults = {
 	}
 }
 
-local LOOT_READY_ITEMS = {}
-
 local CURRENCY_COLOR = "|cFFCC9900"
 local CURRENCY_STRING = "Coin"
 local CURRENCY_LINK = CURRENCY_COLOR.."["..CURRENCY_STRING.."]|r"
@@ -58,28 +56,32 @@ local JUNKBOX = {
 
 PickPocketEvent = {}
 PickPocketEvent.__index = PickPocketEvent
-function PickPocketEvent:New(eventTime, eventType, eventState, eventMark, eventZone, eventSubZone)
+function PickPocketEvent:New(eventTime, eventType, eventState, eventMark, eventZone, eventSubZone, eventLoot)
 	local this = {
 		timestamp = eventTime or 0,
 		type = eventType or EVENT_TYPE.UNKNOWN,
 		state = eventState or EVENT_STATE.INACTIVE,
 		mark = eventMark or "",
 		zone = eventZone or "",
-		subZone = eventSubZone or ""
+		subZone = eventSubZone or "",
+		loot = eventLoot or {}
 	}
 	setmetatable(this, self)
 	return this
 end
+
 function PickPocketEvent:CreateRow()
-	return {timestamp=self.timestamp, type=self.type, mark=self.mark, zone=self.zone, subZone=self.subZone}
-end
-function PickPocketEvent:ToString()
-	return string.format("PickPocketEvent: timestamp=%d, type=%s, state=%s, mark=%s, zone=%s, subZone=%s", self.timestamp, self.type, self.state, self.mark, self.zone, self.subZone)
+	return {timestamp=self.timestamp, type=self.type, mark=self.mark, zone=self.zone, subZone=self.subZone, loot=self.loot}
 end
 
-local CURRENT_EVENT = {}
+function PickPocketEvent:ToString()
+	return string.format("PickPocketEvent: timestamp=%d, type=%s, state=%s, mark=%s, zone=%s, subZone=%s, loot=%d", self.timestamp, self.type, self.state, self.mark, self.zone, self.subZone, table.getn(self.loot))
+end
+
+local CURRENT_EVENT
 
 function TheArtfulDodgersLedger:OnInitialize()
+	self:RegisterChatCommand('adl', "ChatCommand")
 	self.db = LibStub("AceDB-3.0"):New("TheArtfulDodgersLedgerDB", defaults).char
 	self.db.stats = defaults.char.stats
 end
@@ -89,7 +91,6 @@ function TheArtfulDodgersLedger:OnDisable()
 end
 
 function TheArtfulDodgersLedger:OnEnable()
-	self:RegisterChatCommand('adl', "ChatCommand")
 	self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
 	self:RegisterEvent("UI_ERROR_MESSAGE")
 	self:RegisterEvent("LOOT_READY")
@@ -125,14 +126,8 @@ function TheArtfulDodgersLedger:GetLootedHistoryEventItem(loot, lootIndex)
 end
 
 function TheArtfulDodgersLedger:ResetLoot()
-	LOOT_READY_ITEMS = {}
-	self.db.history = {}
+	self.db.history = defaults.char.history
 	self.db.stats = defaults.char.stats
-end
-
-function TheArtfulDodgersLedger:Reset()
-	LOOT_READY_ITEMS = {}
-	CURRENT_EVENT = PickPocketEvent:New()
 end
 
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
@@ -150,33 +145,45 @@ function TheArtfulDodgersLedger:IsPickPocketEvent(sourceName, subEvent, spellNam
 end
 
 function TheArtfulDodgersLedger:UI_ERROR_MESSAGE(event, errorType, message)
-    print(CURRENT_EVENT.timestamp, CURRENT_EVENT.state, event, errorType, message)
+	if CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
+		print(CURRENT_EVENT.timestamp, CURRENT_EVENT.state, event, errorType, message)
+	end
 	if message == ERR_ALREADY_PICKPOCKETED or message == SPELL_FAILED_TARGET_NO_POCKETS or message == RESIST then
 		CURRENT_EVENT.state = EVENT_STATE.ERROR
-		print(CURRENT_EVENT.timestamp, CURRENT_EVENT.state, event, errorType, message)
+		self:EndPickpocketEvent()
 	end
 end
 
 function TheArtfulDodgersLedger:LOOT_READY(autoloot)
 	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
-		for i = 1, GetNumLootItems() do
-			local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(i)
-			print(i, lootName)
-			if i > 1 then
+		local numLootItems = GetNumLootItems()
+		for slotNumber = 1, numLootItems do
+			local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
+			if slotNumber > 1 then
                 local lootLink = GetLootSlotLink(i)
                 local newItem = Item:CreateFromItemLink(lootLink)
                 newItem:ContinueOnItemLoad(function()
                     local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
-					print("Inserting: ", itemName, itemSellPrice)
-					table.insert(LOOT_READY_ITEMS, {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice})
+					local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
+					print("LOOT_READY: ", item.name, item.price)
+					self:AddToEventLoot(item, slotNumber, numLootItems)				
 				end)
 			else
-                table.insert(LOOT_READY_ITEMS, {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)})
+				local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
+				print("LOOT_READY: ", item.name, item.price)
+				self:AddToEventLoot(item, slotNumber, numLootItems)
 			end
 		end
+	end
+end
+
+function TheArtfulDodgersLedger:AddToEventLoot(lootItem, slotNumber, numLootItems)
+	print("AddToEventLoot: ", lootItem.name, slotNumber, numLootItems)
+	table.insert(CURRENT_EVENT.loot, lootItem)
+	if slotNumber == numLootItems then
 		CURRENT_EVENT.state = EVENT_STATE.LOOTED
 		self:EndPickpocketEvent()
-	end
+	else
 end
 
 --function TheArtfulDodgersLedger:CHAT_MSG_MONEY(event, message)
@@ -186,15 +193,17 @@ end
 --end
 
 function TheArtfulDodgersLedger:EndPickpocketEvent()
-	local itemCopper = self:GetItemSellValueTotal()
-	print(CURRENT_EVENT:ToString())
-    table.insert(self.db.history, {timestamp=CURRENT_EVENT.timestamp, type=CURRENT_EVENT.type, mark=CURRENT_EVENT.mark, zone=CURRENT_EVENT.zone, subZone=CURRENT_EVENT.subZone, loot=LOOT_READY_ITEMS})
-	self:SortGlobalLootedHistoryTable()
-	self:AddToLootedCopper(itemCopper)
-	if CURRENT_EVENT.type == EVENT_TYPE.PICKPOCKET then 
-		self:AddToLootedCounts(1)
+	if CURRENT_EVENT.state = EVENT_STATE.LOOTED then
+		local itemCopper = self:GetItemSellValueTotal()
+		print(CURRENT_EVENT:ToString())
+		table.insert(self.db.history, CURRENT_EVENT)
+		self:SortGlobalLootedHistoryTable()
+		self:AddToLootedCopper(itemCopper)
+		if CURRENT_EVENT.type == EVENT_TYPE.PICKPOCKET then 
+			self:AddToLootedCounts(1)
+		end
 	end
-	self:Reset()
+	CURRENT_EVENT = nil
 end
 
 function TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
@@ -203,9 +212,9 @@ end
 
 function TheArtfulDodgersLedger:GetItemSellValueTotal()
 	local totalCopper = 0
-	for i = 1, table.getn(LOOT_READY_ITEMS) do
-		print("Adding: item=", LOOT_READY_ITEMS[i].name, ", price=", LOOT_READY_ITEMS[i].price)
-		totalCopper = totalCopper + LOOT_READY_ITEMS[i].price
+	for i = 1, table.getn(CURRENT_EVENT.loot) do
+		print("GetItemSellValueTotal: ", CURRENT_EVENT.loot[i].name, CURRENT_EVENT.loot[i].price)
+		totalCopper = totalCopper + CURRENT_EVENT.loot[i].price
 	end
 	return totalCopper
 end

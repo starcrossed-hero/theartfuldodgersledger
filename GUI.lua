@@ -9,18 +9,18 @@ local LOOT_AVERAGE_STRING = "Average per mark:  %s"
 local DATE_FORMAT = "%b. %d \n%I:%M %p"
 
 function gui:OnEnable()
-    self.db = addon.db
+    gui.db = addon.db
 end
 
 function gui:ShowFrame()   
-	if not self.db.settings.gui.visible then
+	if not gui.db.settings.gui.visible then
 
-		self.db.settings.gui.visible = true
+		gui.db.settings.gui.visible = true
 
 		local frame = AceGUI:Create("Frame")
 		frame:SetTitle("The Artful Dodger's Ledger")
 		frame:SetCallback("OnClose", function(widget)
-				self.db.settings.gui.visible = false
+				gui.db.settings.gui.visible = false
 				AceGUI:Release(widget)
 			end)
 		frame:SetLayout("Flow")
@@ -86,8 +86,8 @@ function gui:ShowFrame()
 		scroll:SetLayout("Flow")
 		scrollcontainer:AddChild(scroll)
 		
-		if self.db.history ~= nil then 
-			for event = 1, table.getn(self.db.history) do
+		if gui.db.history ~= nil then 
+			for event = 1, table.getn(gui.db.history) do
 				local eventTime, mark, zone, subZone, loot = addon:GetLootedHistoryEvent(event)
 				local row = AceGUI:Create("SimpleGroup")
 				row:SetFullWidth(true)
@@ -151,11 +151,11 @@ function gui:ShowFrame()
 		frame:AddChild(totalContainer)
 		
 		local globalLabel = AceGUI:Create("Label")
-		globalLabel:SetText(string.format(LOOT_TOTAL_STRING, GetCoinTextureString(self.db.stats.total.copper)))
+		globalLabel:SetText(string.format(LOOT_TOTAL_STRING, GetCoinTextureString(gui.db.stats.total.copper)))
 		totalContainer:AddChild(globalLabel)
 		
 		local sessionLabel = AceGUI:Create("Label")
-		sessionLabel:SetText(string.format(LOOT_MARKS_STRING, self.db.stats.total.marks))
+		sessionLabel:SetText(string.format(LOOT_MARKS_STRING, gui.db.stats.total.marks))
 		totalContainer:AddChild(sessionLabel)
 		
 		local averageLabel = AceGUI:Create("Label")
