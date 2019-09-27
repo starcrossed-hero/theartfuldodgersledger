@@ -45,7 +45,7 @@ local columns = {
 			width = 0.25
 		},
 		column = {
-			type = "Label"
+			type = "Label",
 			width = 0.2
 		}
 	},
@@ -55,6 +55,7 @@ local columns = {
 			width = 0.1
 		},
 		column = {
+			type = "Icon",
 			width = 0.2
 		}
 	},
@@ -64,6 +65,7 @@ local columns = {
 			width = 0.1
 		},
 		column = {
+			type = "Label",
 			width = 0.08
 		}
 	},
@@ -73,6 +75,7 @@ local columns = {
 			width = 0.1
 		},
 		column = {
+			type = "Label",
 			width = 0.08
 		}
 	}
@@ -83,11 +86,11 @@ function gui:OnEnable()
 end
 
 function gui:ShowFrame()   
-	if not gui.db.settings.gui.visible then
+	if gui.db.settings.gui.visible or not gui.db.settings.gui.visible then
 
 		gui.db.settings.gui.visible = true
 
-		frame = gui:CreateFrame()
+		local frame = gui:CreateHistoryStatsFrame()
 
 		frame:AddChild(gui:CreateTableSectionHeading())
 		frame:AddChild(gui:CreateTableHeaders())
@@ -107,18 +110,18 @@ end
 
 function gui:FillHistoryTable(table)
 	if gui.db.history ~= nil then 
-		for event = 1, table.getn(gui.db.history) do
+		for event = 1, #gui.db.history do
 			local eventTime, mark, zone, subZone, loot = addon:GetLootedHistoryEvent(event)
 			local row = gui:CreateRow()
-			for item = 1, table.getn(loot) do
+			for item = 1, #loot do
 				local _, icon, name, link, quantity, _, price = addon:GetLootedHistoryEventItem(loot, item)
-				row:AddChild(gui:CreateCell(date(DATE_FORMAT, eventTime), columns.timestamp.column))
-				row:AddChild(gui:CreateCell(zone, columns.zone.column))
-				row:AddChild(gui:CreateCell(subZone, columns.subZone.column))
-				row:AddChild(gui:CreateCell(mark, columns.mark.column))
-				row:AddChild(gui:CreateCell(link, columns.item.column, icon))
-				row:AddChild(gui:CreateCell(quantity, columns.column.quantity))
-				row:AddChild(gui:CreateCell(GetCoinTextureString(price), columns.column.price))
+				row:AddChild(gui:CreateCell(date(DATE_FORMAT, eventTime), columns.timestamp, false))
+				row:AddChild(gui:CreateCell(zone, columns.zone, false))
+				row:AddChild(gui:CreateCell(subZone, columns.subZone, false))
+				row:AddChild(gui:CreateCell(mark, columns.mark, false))
+				row:AddChild(gui:CreateCell(link, columns.item, false, icon))
+				row:AddChild(gui:CreateCell(quantity, columns.quantity, false))
+				row:AddChild(gui:CreateCell(GetCoinTextureString(price), columns.price, false))
 			end
 			table:AddChild(row)
 		end
@@ -139,11 +142,12 @@ function gui:CreateScrollFrame()
 end
 
 function gui:CreateScrollContainer()
-	scrollcontainer = AceGUI:Create("SimpleGroup")
+	local scrollcontainer = AceGUI:Create("SimpleGroup")
 	scrollcontainer:SetFullWidth(true)
 	scrollcontainer:SetLayout("Fill")
 	scrollcontainer:SetPoint("TOP")
 	scrollcontainer:SetHeight(400)
+	return scrollcontainer
 end
 
 function gui:CreateTableSectionHeading()
@@ -187,25 +191,16 @@ function gui:CreateHeading(text, relativeWidth)
 end
 
 function gui:CreateHistoryStatsFrame()
-	return gui:CreateFrame("The Artful Dodger's Ledger", "Flow", 600, {event = "OnClose", action = function(widget)
-			gui.db.settings.gui.visible = false
-			AceGUI:Release(widget)
-		end})
-	local frame = AceGUI:Create("Frame")
-	frame:SetTitle("The Artful Dodger's Ledger")
-	frame:SetCallback("OnClose", function(widget)
-			gui.db.settings.gui.visible = false
-			AceGUI:Release(widget)
-		end)
-	frame:SetLayout("Flow")
-	frame:SetHeight(600)
-	return frame
+	return gui:CreateFrame("The Artful Dodger's Ledger", "Flow", 600)
 end
 
-function gui:CreateFrame(title, layout, height, callback)
+function gui:CreateFrame(title, layout, height)
 	local frame = AceGUI:Create("Frame")
 	frame:SetTitle(title)
-	frame:SetCallback(callback.event, callback.action)
+	frame:SetCallback("OnClose", function(widget)
+		gui.db.settings.gui.visible = false
+		AceGUI:Release(widget)
+	end)
 	frame:SetLayout(layout)
 	frame:SetHeight(height)
 	return frame
@@ -219,24 +214,45 @@ function gui:CreateTableHeaders()
 	return header
 end
 
-function gui:CreateCell(title, column, image)
+function gui:CreateCell(title, column, header, image)
 	local cell
-	if column.type == "Label" then
-		cell = AceGUI:Create(column.type)
+	if column.column.type == "Label" then
+		cell = AceGUI:Create(column.column.type)
 		cell:SetText(title)
-	else if type == "InteractiveLabel" then
-		cell = AceGUI:Create(column.type)
+	elseif column.column.type == "InteractiveLabel" then
+		cell = AceGUI:Create(column.column.type)
 		cell:SetText(title)
-	else if type == "Icon" then
-		cell = AceGUI:Create(column.type)
+	elseif column.column.type == "Icon" then
+		cell = AceGUI:Create(column.column.type)
 		cell:SetLabel(title)
-		cell:SetIcon(image)
+		cell:SetImage(image)
+		cell:SetImageSize(20,20)
+		cell:SetCallback("OnClick", function() print(title) end)
+		cell:SetCallback("OnEnter", function(widget)
+			GameTooltip:SetOwner(widget.frame, "ANCHOR_NONE")
+			GameTooltip:SetPoint("TOPLEFT", widget.frame, "BOTTOMLEFT")
+			GameTooltip:ClearLines()
+			if string.match(title, "Coin") and string.match(title, "|cFFCC9900") then
+				GameTooltip:AddLine(title)
+			else 
+				GameTooltip:SetHyperlink(title)
+			end
+			GameTooltip:Show()
+		end)
+		cell:SetCallback("OnLeave", function()
+			GameTooltip:Hide()
+		end)
 	end
-	cell:SetRelativeWidth(column.width)
+	if header then
+		cell:SetRelativeWidth(column.header.width)
+	else
+		cell:SetRelativeWidth(column.column.width)
+	end
+	return cell
 end
 
 function gui:AddHeader(parent, column)
-	local header = gui:CreateCell(column.header, column.width, true)
+	local header = gui:CreateCell(column.header.title, column, true)
 	parent:AddChild(header)
 end
 
@@ -245,7 +261,7 @@ function gui:AddHeaders(parent)
 	gui:AddHeader(parent, columns.zone)
 	gui:AddHeader(parent, columns.subZone)
 	gui:AddHeader(parent, columns.mark)
-	gui:AddHeader(parent, columns.link)
+	gui:AddHeader(parent, columns.item)
 	gui:AddHeader(parent, columns.quantity)
 	gui:AddHeader(parent, columns.price)
 end

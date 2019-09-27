@@ -32,7 +32,7 @@ local defaults = {
 local CURRENCY_COLOR = "|cFFCC9900"
 local CURRENCY_STRING = "Coin"
 local CURRENCY_LINK = CURRENCY_COLOR.."["..CURRENCY_STRING.."]|r"
-local CURRENCY_ICON_ID = 11966
+local CURRENCY_ICON_ID = 11937
 
 local EVENT_STATE = {
 	ACTIVE = 1,
