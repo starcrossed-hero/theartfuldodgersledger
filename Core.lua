@@ -15,12 +15,15 @@ local defaults = {
 				visible = false
 			}
 		},
-		stats = {
+		stats = {			
 			total = {
+				duration = 0,
 				marks = 0,
 				copper = 0
 			},
 			session = {
+				sessionStart = 0,
+				duration = 0,
 				marks = 0,
 				copper = 0
 			}
@@ -32,7 +35,7 @@ local defaults = {
 local CURRENCY_COLOR = "|cFFCC9900"
 local CURRENCY_STRING = "Coin"
 local CURRENCY_LINK = CURRENCY_COLOR.."["..CURRENCY_STRING.."]|r"
-local CURRENCY_ICON_ID = 11966
+local CURRENCY_ICON_ID = "Interface\\Icons\\INV_Misc_Coin_01"
 
 local EVENT_STATE = {
 	ACTIVE = 1,
@@ -84,9 +87,12 @@ function TheArtfulDodgersLedger:OnInitialize()
 	self:RegisterChatCommand('adl', "ChatCommand")
 	self.db = LibStub("AceDB-3.0"):New("TheArtfulDodgersLedgerDB", defaults).char
 	self.db.stats.session = defaults.char.stats.session
+	self.db.stats.session.sessionStart = time()
+	TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
 end
 
 function TheArtfulDodgersLedger:OnDisable()
+	self.db.stats.total.duration = self.db.stats.total.duration + self.db.stats.session.duration
 	self.db.stats.session = defaults.char.stats.session
 end
 
@@ -125,9 +131,13 @@ function TheArtfulDodgersLedger:GetLootedHistoryEventItem(loot, lootIndex)
 	return loot[lootIndex].timestamp, loot[lootIndex].icon, loot[lootIndex].name, loot[lootIndex].link, loot[lootIndex].quantity, loot[lootIndex].quality, loot[lootIndex].price
 end
 
-function TheArtfulDodgersLedger:ResetLoot()
+function TheArtfulDodgersLedger:ResetAll()
 	self.db.history = defaults.char.history
 	self.db.stats = defaults.char.stats
+end
+
+function TheArtfulDodgersLedger:ResetSessionStats()
+	self.db.stats.session = defaults.char.stats.session
 end
 
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
@@ -145,10 +155,11 @@ function TheArtfulDodgersLedger:IsPickPocketEvent(sourceName, subEvent, spellNam
 end
 
 function TheArtfulDodgersLedger:UI_ERROR_MESSAGE(event, errorType, message)
-	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
-		print(CURRENT_EVENT.timestamp, CURRENT_EVENT.state, event, errorType, message)
-	end
-	if CURRENT_EVENT and (message == ERR_ALREADY_PICKPOCKETED or message == SPELL_FAILED_TARGET_NO_POCKETS or message == RESIST or message == SPELL_FAILED_ONLY_STEALTHED) then
+	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE and (
+		message == ERR_ALREADY_PICKPOCKETED or 
+		message == SPELL_FAILED_TARGET_NO_POCKETS or 
+		message == SPELL_FAILED_ONLY_STEALTHED or 
+		message == SPELL_FAILED_ONLY_SHAPESHIFT) then
 		CURRENT_EVENT.state = EVENT_STATE.ERROR
 		self:EndPickpocketEvent()
 	end
@@ -204,6 +215,10 @@ function TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
 	table.sort(self.db.history, function(a,b) return a.timestamp > b.timestamp end)
 end
 
+function TheArtfulDodgersLedger:SortTable(columnName)
+	table.sort(self.db.history, function(a,b) return a[columnName] > b[columnName] end)
+end
+
 function TheArtfulDodgersLedger:GetItemSellValueTotal()
 	local totalCopper = 0
 	for i = 1, table.getn(CURRENT_EVENT.loot) do
@@ -238,6 +253,13 @@ end
 function TheArtfulDodgersLedger:CalculateAverageCopperPerMark(copper, count)
 	if copper and count and copper > 0 and count > 0 then
 		return self:Round((copper / count))
+	end
+	return 0
+end
+
+function TheArtfulDodgersLedger:CalculateAverageCopperPerHour(copper, seconds)
+	if copper > 0 and seconds > 0 then
+		return math.floor(((copper / seconds) * 3600))
 	end
 	return 0
 end
