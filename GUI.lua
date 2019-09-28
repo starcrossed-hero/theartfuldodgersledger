@@ -91,12 +91,36 @@ function gui:ShowFrame()
 		gui.db.settings.gui.visible = true
 
 		local frame = gui:CreateHistoryStatsFrame()
+		-- Create the TabGroup
+		local tab =  AceGUI:Create("TabGroup")
+		tab:SetLayout("Flow")
+		-- Setup which tabs to show
+		tab:SetTabs({{text="Picked Pockets", value="tab1"}, {text="Plunder Tallied", value="tab2"}, {text="Settings", value="tab3"}})
+		-- Register callback
+		tab:SetCallback("OnGroupSelected", function(container, event, group)
+			container:ReleaseChildren()
+			if group == "tab1" then
+				container:AddChild(gui:CreateTableSectionHeading())
+				container:AddChild(gui:CreateTableHeaders())
+				container:AddChild(gui:CreateHistoryTable())
+			elseif group == "tab2" then
+				container:AddChild(gui:CreateStatsSectionHeading())
+				container:AddChild(gui:CreateStatsDisplay())
+			elseif group == "tab3" then
+				container:AddChild(gui:CreateSettingsDisplay())
+			end
+		end)
 
-		frame:AddChild(gui:CreateTableSectionHeading())
-		frame:AddChild(gui:CreateTableHeaders())
-		frame:AddChild(gui:CreateHistoryTable())
-		frame:AddChild(gui:CreateStatsSectionHeading())
-		frame:AddChild(gui:CreateStatsDisplay())
+		frame:AddChild(tab)
+
+		-- Set initial Tab (this will fire the OnGroupSelected callback)
+		tab:SelectTab("tab1")
+
+		--frame:AddChild(gui:CreateTableSectionHeading())
+		--frame:AddChild(gui:CreateTableHeaders())
+		--frame:AddChild(gui:CreateHistoryTable())
+		--frame:AddChild(gui:CreateStatsSectionHeading())
+		--frame:AddChild(gui:CreateStatsDisplay())
 	end
 end
 
@@ -115,13 +139,13 @@ function gui:FillHistoryTable(table)
 			local row = gui:CreateRow()
 			for item = 1, #loot do
 				local _, icon, name, link, quantity, _, price = addon:GetLootedHistoryEventItem(loot, item)
-				row:AddChild(gui:CreateCell(date(DATE_FORMAT, eventTime), columns.timestamp, false))
-				row:AddChild(gui:CreateCell(zone, columns.zone, false))
-				row:AddChild(gui:CreateCell(subZone, columns.subZone, false))
-				row:AddChild(gui:CreateCell(mark, columns.mark, false))
-				row:AddChild(gui:CreateCell(link, columns.item, false, icon))
-				row:AddChild(gui:CreateCell(quantity, columns.quantity, false))
-				row:AddChild(gui:CreateCell(GetCoinTextureString(price), columns.price, false))
+				row:AddChild(gui:CreateCell(date(DATE_FORMAT, eventTime), columns.timestamp))
+				row:AddChild(gui:CreateCell(zone, columns.zone))
+				row:AddChild(gui:CreateCell(subZone, columns.subZone))
+				row:AddChild(gui:CreateCell(mark, columns.mark))
+				row:AddChild(gui:CreateCell(link, columns.item, icon))
+				row:AddChild(gui:CreateCell(quantity, columns.quantity))
+				row:AddChild(gui:CreateCell(GetCoinTextureString(price), columns.price))
 			end
 			table:AddChild(row)
 		end
@@ -158,6 +182,26 @@ function gui:CreateStatsSectionHeading()
 	return gui:CreateHeading("Totals", 1)
 end
 
+function gui:CreateSettingsDisplay()
+	local settingsContainer = AceGUI:Create("SimpleGroup")
+	settingsContainer:SetFullWidth(true)
+	settingsContainer:SetLayout("Flow")
+
+	local resetSessionButton = AceGUI:Create("Button")
+	resetSessionButton:SetText("Reset Session")
+	resetSessionButton:SetWidth(200)
+	resetSessionButton:SetCallback("OnClick", function() addon:ResetSessionStats() end)
+	settingsContainer:AddChild(resetSessionButton)
+
+	local resetAllButton = AceGUI:Create("Button")
+	resetAllButton:SetText("Reset All Stats")
+	resetAllButton:SetWidth(200)
+	resetAllButton:SetCallback("OnClick", function() addon:ResetAll() end)
+	settingsContainer:AddChild(resetAllButton)
+
+	return settingsContainer
+end
+
 function gui:CreateStatsDisplay()
 	local container = AceGUI:Create("SimpleGroup")
 	container:SetFullWidth(true)
@@ -174,12 +218,6 @@ function gui:CreateStatsDisplay()
 	averageLabel:SetText(string.format(LOOT_AVERAGE_STRING, GetCoinTextureString(addon:GetGlobalAverage())))
 	container:AddChild(averageLabel)
 
-	local resetButton = AceGUI:Create("Button")
-	resetButton:SetText("Reset All Stats")
-	resetButton:SetWidth(200)
-	resetButton:SetCallback("OnClick", function() addon:ResetLoot() end)
-	container:AddChild(resetButton)
-
 	return container
 end
 
@@ -191,7 +229,7 @@ function gui:CreateHeading(text, relativeWidth)
 end
 
 function gui:CreateHistoryStatsFrame()
-	return gui:CreateFrame("The Artful Dodger's Ledger", "Flow", 600)
+	return gui:CreateFrame("The Artful Dodger's Ledger", "Fill", 600)
 end
 
 function gui:CreateFrame(title, layout, height)
@@ -214,7 +252,7 @@ function gui:CreateTableHeaders()
 	return header
 end
 
-function gui:CreateCell(title, column, header, image)
+function gui:CreateCell(title, column, image)
 	local cell
 	if column.column.type == "Label" then
 		cell = AceGUI:Create(column.column.type)
@@ -243,16 +281,18 @@ function gui:CreateCell(title, column, header, image)
 			GameTooltip:Hide()
 		end)
 	end
-	if header then
-		cell:SetRelativeWidth(column.header.width)
-	else
-		cell:SetRelativeWidth(column.column.width)
-	end
+	cell:SetRelativeWidth(column.column.width)
 	return cell
 end
 
 function gui:AddHeader(parent, column)
-	local header = gui:CreateCell(column.header.title, column, true)
+	local header = AceGUI:Create("InteractiveLabel")
+	header:SetText(column.header.title)
+	header:SetRelativeWidth(column.header.width)
+	header:SetFontObject(GameFontNormalLarge)
+	header:SetCallback("OnClick", function() 
+		addon:SortTable(gui.db.history, "mark")
+	end)
 	parent:AddChild(header)
 end
 

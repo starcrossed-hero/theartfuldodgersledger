@@ -7,7 +7,7 @@ local UPDATE_FREQUENCY = 2
 
 local GOLD = "|cffeec300"
 local WHITE = "|cffFFFFFF"
-local STATUS_STRING_FORMAT = GOLD.."Coin:|r "..WHITE.."%s|r  "..GOLD.."Marks:|r "..WHITE.."%d|r   "..GOLD.."Average:|r "..WHITE.."%s|r"
+local STATUS_STRING_FORMAT = GOLD.."Coin:|r "..WHITE.."%s|r  "..GOLD.."Marks:|r "..WHITE.."%d|r   "..GOLD.."Average:|r  "..WHITE.."%s|r "..GOLD.."/mark|r  "..WHITE.."%s"..GOLD.."/hour|r"
 
 local dataObject = LibStub:GetLibrary("LibDataBroker-1.1"):NewDataObject("The Artful Dodger's Ledger", {
     type = "data source", 
@@ -15,6 +15,7 @@ local dataObject = LibStub:GetLibrary("LibDataBroker-1.1"):NewDataObject("The Ar
     text = string.format(STATUS_STRING_FORMAT, 
         GetCoinTextureString(0), 
         0, 
+        GetCoinTextureString(0),
         GetCoinTextureString(0)
     )
 })
@@ -31,13 +32,18 @@ ldbDataSourceDisplay:SetScript("OnUpdate", function(self, elapsed)
     if UPDATE_FREQUENCY <= 0 then
         UPDATE_FREQUENCY = 2
         if minimap.db then
+            local duration = time() - minimap.db.stats.session.sessionStart
             dataObject.text = string.format(STATUS_STRING_FORMAT, 
                 GetCoinTextureString(minimap.db.stats.session.copper), 
                 minimap.db.stats.session.marks, 
                 GetCoinTextureString(
-                    addon:CalculateAverageCopperPerMark(minimap.db.stats.session.copper, minimap.db.stats.session.count)
+                    addon:CalculateAverageCopperPerMark(minimap.db.stats.session.copper, minimap.db.stats.session.marks)
+                ),
+                GetCoinTextureString(
+                    addon:CalculateAverageCopperPerHour(minimap.db.stats.session.copper, minimap.db.stats.session.duration)
                 )
             )
+            minimap.db.stats.session.duration = duration
         end
     end
 end)
