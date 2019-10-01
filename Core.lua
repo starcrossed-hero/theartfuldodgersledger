@@ -1,4 +1,5 @@
 TheArtfulDodgersLedger = LibStub("AceAddon-3.0"):NewAddon("TheArtfulDodgersLedger", "AceConsole-3.0", "AceEvent-3.0")
+local AceGUI = LibStub("AceGUI-3.0")
 
 if UnitClass('player') ~= 'Rogue' then
 	return
@@ -17,12 +18,13 @@ local defaults = {
 		},
 		stats = {			
 			total = {
+				start = 0,
 				duration = 0,
 				marks = 0,
 				copper = 0
 			},
 			session = {
-				sessionStart = 0,
+				start = 0,
 				duration = 0,
 				marks = 0,
 				copper = 0
@@ -64,7 +66,7 @@ function PickPocketEvent:New(eventTime, eventType, eventState, eventMark, eventZ
 		timestamp = eventTime or 0,
 		type = eventType or EVENT_TYPE.UNKNOWN,
 		state = eventState or EVENT_STATE.INACTIVE,
-		mark = eventMark or "",
+		mark = eventMark or {},
 		zone = eventZone or "",
 		subZone = eventSubZone or "",
 		loot = eventLoot or {}
@@ -78,7 +80,7 @@ function PickPocketEvent:CreateRow()
 end
 
 function PickPocketEvent:ToString()
-	return string.format("PickPocketEvent: timestamp=%d, type=%s, state=%s, mark=%s, zone=%s, subZone=%s, loot=%d", self.timestamp, self.type, self.state, self.mark, self.zone, self.subZone, table.getn(self.loot))
+	return string.format("PickPocketEvent: timestamp=%d, type=%s, state=%s, mark=%s, zone=%s, subZone=%s, loot=%d", self.timestamp, self.type, self.state, #self.mark, self.zone, self.subZone, #self.loot)
 end
 
 local CURRENT_EVENT
@@ -87,13 +89,15 @@ function TheArtfulDodgersLedger:OnInitialize()
 	self:RegisterChatCommand('adl', "ChatCommand")
 	self.db = LibStub("AceDB-3.0"):New("TheArtfulDodgersLedgerDB", defaults).char
 	self.db.stats.session = defaults.char.stats.session
-	self.db.stats.session.sessionStart = time()
+	self.db.stats.session.start = time()
+	if self.db.stats.total.start <= 0 then
+		self.db.stats.total.start = self.db.stats.session.start
+	end
 	TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
 end
 
 function TheArtfulDodgersLedger:OnDisable()
 	self.db.stats.total.duration = self.db.stats.total.duration + self.db.stats.session.duration
-	self.db.stats.session = defaults.char.stats.session
 end
 
 function TheArtfulDodgersLedger:OnEnable()
@@ -111,7 +115,7 @@ function TheArtfulDodgersLedger:ITEM_LOCK_CHANGED(event, bag, slot)
 	if event and bag and slot then
 		local icon, itemCount, locked, quality, readable, lootable, itemLink, isFiltered, noValue, itemID = GetContainerItemInfo(bag, slot)
 		if self:InTable(JUNKBOX, itemID) then
-			CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.JUNKBOX, EVENT_STATE.ACTIVE, itemLink)
+			CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.JUNKBOX, EVENT_STATE.ACTIVE, {name = itemLink})
 		end
 	end
 end
@@ -143,12 +147,17 @@ end
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
 	local timestamp, subEvent, _, _, sourceName, _, _, _, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
 	if self:IsPickPocketEvent(sourceName, subEvent, spellName) then
-		CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.PICKPOCKET, EVENT_STATE.ACTIVE, destName, GetRealZoneText(), GetSubZoneText())
+		if subEvent == SPELL_CAST_SUCCESS then
+			CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.PICKPOCKET, EVENT_STATE.ACTIVE, {name = destName, level = UnitLevel("target")}, GetRealZoneText(), GetSubZoneText())
+		elseif subEvent == SPELL_MISSED then
+			CURRENT_EVENT.state = EVENT_STATE.ERROR
+			self:EndPickpocketEvent()
+		end
 	end
 end
 
 function TheArtfulDodgersLedger:IsPickPocketEvent(sourceName, subEvent, spellName)
-	if sourceName == UnitName("player") and subEvent == "SPELL_CAST_SUCCESS" and spellName == "Pick Pocket" then
+	if sourceName == UnitName("player") and spellName == "Pick Pocket" then
 		return true
 	end
 	return false
@@ -238,16 +247,35 @@ function TheArtfulDodgersLedger:AddToLootedCopper(copper)
     self.db.stats.session.copper = self.db.stats.session.copper + copper
 end
 
+function TheArtfulDodgersLedger:GetAverageCopperPerMarkForZone(zone)
+	local zoneStats = TheArtfulDodgersLedger:GetLootStatsForZone(zone)
+	return TheArtfulDodgersLedger:CalculateAverageCopperPerMark(zoneStats.copper, zoneStats.marks)
+end
+
+function TheArtfulDodgersLedger:GetLootStatsForZone(zone)
+	local copper = 0
+	local marks = 0
+	for event = 1, #self.db.history do
+		if self.db.history[event].zone == zone then
+			for loot = 1, #self.db.history[event].loot do
+				marks = marks + 1
+				copper = copper + self.db.history[event].loot[loot].price
+			end
+		end
+	end
+	return {marks = marks, copper = copper}
+end
+
 function TheArtfulDodgersLedger:GetPrettyPrintTotalLootedString()
-	return self:GetPrettyPrintString("historic", "stash", GetCoinTextureString(self.db.stats.total.copper), self.db.stats.total.marks, GetCoinTextureString(self:GetGlobalAverage()))
+	return self:GetPrettyPrintString(date("%b. %d %I:%M %p", self.db.stats.total.start), "historic", "stash", GetCoinTextureString(self.db.stats.total.copper), self.db.stats.total.marks, GetCoinTextureString(self:GetGlobalAverage()))
 end
 
 function TheArtfulDodgersLedger:GetPrettyPrintSessionLootedString()
-	return self:GetPrettyPrintString("current", "purse", GetCoinTextureString(self.db.stats.session.copper), self.db.stats.session.marks, GetCoinTextureString(self:GetSessionAverage()))
+	return self:GetPrettyPrintString(date("%b. %d %I:%M %p", self.db.stats.session.start), "current", "purse", GetCoinTextureString(self.db.stats.session.copper), self.db.stats.session.marks, GetCoinTextureString(self:GetSessionAverage()))
 end
 
-function TheArtfulDodgersLedger:GetPrettyPrintString(period, store, copper, count, average)
-	return string.format("Your %s pilfering has increased your %s by %s \nYou've pick pocketed from %d mark(s) and \nstolen an average of %s from each victim", period, store, copper, count, average)
+function TheArtfulDodgersLedger:GetPrettyPrintString(date, period, store, copper, count, average)
+	return string.format("\nSince |cffFFFFFF%s|r,\n\nYour |cff334CFF%s|r pilfering has "..GREEN_FONT_COLOR_CODE.."increased|r your %s by |cffFFFFFF%s|r \nYou've "..RED_FONT_COLOR_CODE.."pick pocketed|r from |cffFFFFFF%d|r mark(s)\nYou've "..RED_FONT_COLOR_CODE.."stolen|r an average of |cffFFFFFF%s|r from each victim", date, period, store, copper, count, average)
 end
 
 function TheArtfulDodgersLedger:CalculateAverageCopperPerMark(copper, count)

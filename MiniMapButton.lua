@@ -7,7 +7,7 @@ local UPDATE_FREQUENCY = 2
 
 local GOLD = "|cffeec300"
 local WHITE = "|cffFFFFFF"
-local STATUS_STRING_FORMAT = GOLD.."Coin:|r "..WHITE.."%s|r  "..GOLD.."Marks:|r "..WHITE.."%d|r   "..GOLD.."Average:|r  "..WHITE.."%s|r "..GOLD.."/mark|r  "..WHITE.."%s"..GOLD.."/hour|r"
+local STATUS_STRING_FORMAT = GOLD.."Coin:|r "..WHITE.."%s|r  "..GOLD.."Marks:|r "..WHITE.."%d|r   "..GOLD.."Avg/Hr:|r  "..WHITE.."%s|r"..GOLD.."  Avg/Mk:|r  "..WHITE.."%s|r"
 
 local dataObject = LibStub:GetLibrary("LibDataBroker-1.1"):NewDataObject("The Artful Dodger's Ledger", {
     type = "data source", 
@@ -32,7 +32,7 @@ ldbDataSourceDisplay:SetScript("OnUpdate", function(self, elapsed)
     if UPDATE_FREQUENCY <= 0 then
         UPDATE_FREQUENCY = 2
         if minimap.db then
-            local duration = time() - minimap.db.stats.session.sessionStart
+            local duration = time() - minimap.db.stats.session.start
             dataObject.text = string.format(STATUS_STRING_FORMAT, 
                 GetCoinTextureString(minimap.db.stats.session.copper), 
                 minimap.db.stats.session.marks, 

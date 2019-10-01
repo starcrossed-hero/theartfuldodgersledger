@@ -142,7 +142,7 @@ function gui:FillHistoryTable(table)
 				row:AddChild(gui:CreateCell(date(DATE_FORMAT, eventTime), columns.timestamp))
 				row:AddChild(gui:CreateCell(zone, columns.zone))
 				row:AddChild(gui:CreateCell(subZone, columns.subZone))
-				row:AddChild(gui:CreateCell(mark, columns.mark))
+				row:AddChild(gui:CreateCell(mark.name, columns.mark))
 				row:AddChild(gui:CreateCell(link, columns.item, icon))
 				row:AddChild(gui:CreateCell(quantity, columns.quantity))
 				row:AddChild(gui:CreateCell(GetCoinTextureString(price), columns.price))
@@ -217,6 +217,9 @@ function gui:CreateStatsDisplay()
 	local averageLabel = AceGUI:Create("Label")
 	averageLabel:SetText(string.format(LOOT_AVERAGE_STRING, GetCoinTextureString(addon:GetGlobalAverage())))
 	container:AddChild(averageLabel)
+	local zoneAverageLabel = AceGUI:Create("Label")
+	zoneAverageLabel:SetText("Current Zone: "..GetRealZoneText().." Average Copper: "..GetCoinTextureString(TheArtfulDodgersLedger:GetAverageCopperPerMarkForZone(GetRealZoneText())))
+	container:AddChild(zoneAverageLabel)
 
 	return container
 end
@@ -291,7 +294,11 @@ function gui:AddHeader(parent, column)
 	header:SetRelativeWidth(column.header.width)
 	header:SetFontObject(GameFontNormalLarge)
 	header:SetCallback("OnClick", function() 
-		addon:SortTable(gui.db.history, "mark")
+		if column.header.title == "Mark" then
+			addon:SortTable(gui.db.history, "mark")
+		elseif column.header.title == "Loot" then
+			addon:SortTable(gui.db.history, "mark")
+		end
 	end)
 	parent:AddChild(header)
 end
