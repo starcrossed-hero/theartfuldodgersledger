@@ -84,6 +84,8 @@ function PickPocketEvent:ToString()
 end
 
 local CURRENT_EVENT
+local LOOT_SECOND = false
+local LOOT_COUNT = 0
 
 function TheArtfulDodgersLedger:OnInitialize()
 	self:RegisterChatCommand('adl', "ChatCommand")
@@ -145,11 +147,15 @@ function TheArtfulDodgersLedger:ResetSessionStats()
 end
 
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
-	local timestamp, subEvent, _, _, sourceName, _, _, _, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
+	local timestamp, subEvent, _, _, sourceName, _, _, destGuid, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
+	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE and subEvent == "UNIT_DIED" and destGuid == CURRENT_EVENT.mark.guid then
+		LOOT_SECOND = true
+		LOOT_COUNT = 0
+	end
 	if self:IsPickPocketEvent(sourceName, subEvent, spellName) then
-		if subEvent == SPELL_CAST_SUCCESS then
-			CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.PICKPOCKET, EVENT_STATE.ACTIVE, {name = destName, level = UnitLevel("target")}, GetRealZoneText(), GetSubZoneText())
-		elseif subEvent == SPELL_MISSED then
+		if subEvent == "SPELL_CAST_SUCCESS" then
+			CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.PICKPOCKET, EVENT_STATE.ACTIVE, {name = destName, guid = destGuid, level = UnitLevel("target")}, GetRealZoneText(), GetSubZoneText())
+		elseif subEvent == "SPELL_MISSED" then
 			CURRENT_EVENT.state = EVENT_STATE.ERROR
 			self:EndPickpocketEvent()
 		end
@@ -176,22 +182,27 @@ end
 
 function TheArtfulDodgersLedger:LOOT_READY(autoloot)
 	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
-		local numLootItems = GetNumLootItems()
-		for slotNumber = 1, numLootItems do
-			local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
-			if slotNumber > 1 then
-                local lootLink = GetLootSlotLink(slotNumber)
-                local newItem = Item:CreateFromItemLink(lootLink)
-                newItem:ContinueOnItemLoad(function()
-                    local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
-					local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
+		LOOT_COUNT = LOOT_COUNT + 1
+		if LOOT_SECOND == false or LOOT_COUNT > 2 then
+			local numLootItems = GetNumLootItems()
+			for slotNumber = 1, numLootItems do
+				local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
+				if slotNumber > 1 then
+					local guid1, quant1, guid2, quant2 = GetLootSourceInfo(slotNumber)
+					print("LOOT_READY: ", guid1, quant1, guid2, quant2)
+					local lootLink = GetLootSlotLink(slotNumber)
+					local newItem = Item:CreateFromItemLink(lootLink)
+					newItem:ContinueOnItemLoad(function()
+						local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
+						local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
+						print("LOOT_READY: ", item.name, item.price)
+						self:AddToEventLoot(item, slotNumber, numLootItems)				
+					end)
+				else
+					local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
 					print("LOOT_READY: ", item.name, item.price)
-					self:AddToEventLoot(item, slotNumber, numLootItems)				
-				end)
-			else
-				local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
-				print("LOOT_READY: ", item.name, item.price)
-				self:AddToEventLoot(item, slotNumber, numLootItems)
+					self:AddToEventLoot(item, slotNumber, numLootItems)
+				end
 			end
 		end
 	end
@@ -218,6 +229,8 @@ function TheArtfulDodgersLedger:EndPickpocketEvent()
 		end
 	end
 	CURRENT_EVENT = nil
+	LOOT_SECOND = false
+	LOOT_COUNT = 0
 end
 
 function TheArtfulDodgersLedger:SortGlobalLootedHistoryTable()
@@ -275,7 +288,7 @@ function TheArtfulDodgersLedger:GetPrettyPrintSessionLootedString()
 end
 
 function TheArtfulDodgersLedger:GetPrettyPrintString(date, period, store, copper, count, average)
-	return string.format("\nSince |cffFFFFFF%s|r,\n\nYour |cff334CFF%s|r pilfering has "..GREEN_FONT_COLOR_CODE.."increased|r your %s by |cffFFFFFF%s|r \nYou've "..RED_FONT_COLOR_CODE.."pick pocketed|r from |cffFFFFFF%d|r mark(s)\nYou've "..RED_FONT_COLOR_CODE.."stolen|r an average of |cffFFFFFF%s|r from each victim", date, period, store, copper, count, average)
+	return string.format("\nSince |cffFFFFFF%s|r,\n\nYour |cff334CFF%s|r pilfering has "..GREEN_FONT_COLOR_CODE.."increased|r your %s by |cffFFFFFF%s|r \nYou've "..RED_FONT_COLOR_CODE.."picked the pockets|r of |cffFFFFFF%d|r mark(s)\nYou've "..RED_FONT_COLOR_CODE.."stolen|r an average of |cffFFFFFF%s|r from each victim", date, period, store, copper, count, average)
 end
 
 function TheArtfulDodgersLedger:CalculateAverageCopperPerMark(copper, count)
