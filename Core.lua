@@ -43,7 +43,8 @@ local EVENT_STATE = {
 	ACTIVE = 1,
 	INACTIVE = 2,
 	ERROR = 3,
-	LOOTED = 4
+	LOOTED = 4,
+	MARK_DEAD = 5
 }
 
 local EVENT_TYPE = {
@@ -148,21 +149,33 @@ end
 
 function TheArtfulDodgersLedger:COMBAT_LOG_EVENT_UNFILTERED(event)
 	local timestamp, subEvent, _, _, sourceName, _, _, destGuid, destName, _, _, _, spellName = CombatLogGetCurrentEventInfo()
-	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE and subEvent == "UNIT_DIED" and destGuid == CURRENT_EVENT.mark.guid then
-		LOOT_SECOND = true
-		LOOT_COUNT = 0
-	end
-	if self:IsPickPocketEvent(sourceName, subEvent, spellName) then
+	if self:IsNewPickPocketEvent(sourceName, subEvent, spellName) then
 		if subEvent == "SPELL_CAST_SUCCESS" then
 			CURRENT_EVENT = PickPocketEvent:New(time(), EVENT_TYPE.PICKPOCKET, EVENT_STATE.ACTIVE, {name = destName, guid = destGuid, level = UnitLevel("target")}, GetRealZoneText(), GetSubZoneText())
 		elseif subEvent == "SPELL_MISSED" then
 			CURRENT_EVENT.state = EVENT_STATE.ERROR
 			self:EndPickpocketEvent()
 		end
+	elseif TheArtfulDodgersLedger:IsActivePickPocketEvent() and TheArtfulDodgersLedger:HasMarkDied(subEvent, destGuid) then
+		CURRENT_EVENT.state = EVENT_STATE.MARK_DEAD
 	end
 end
 
-function TheArtfulDodgersLedger:IsPickPocketEvent(sourceName, subEvent, spellName)
+function TheArtfulDodgersLedger:IsActivePickPocketEvent()
+	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
+		return true
+	end
+	return false
+end
+
+function TheArtfulDodgersLedger:HasMarkDied(subEvent, unitGuid)
+	if subEvent == "UNIT_DIED" and unitGuid == CURRENT_EVENT.mark.guid then
+		return true
+	end
+	return false
+end
+
+function TheArtfulDodgersLedger:IsNewPickPocketEvent(sourceName, subEvent, spellName)
 	if sourceName == UnitName("player") and spellName == "Pick Pocket" then
 		return true
 	end
@@ -181,29 +194,37 @@ function TheArtfulDodgersLedger:UI_ERROR_MESSAGE(event, errorType, message)
 end
 
 function TheArtfulDodgersLedger:LOOT_READY(autoloot)
-	if CURRENT_EVENT and CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
-		LOOT_COUNT = LOOT_COUNT + 1
-		if LOOT_SECOND == false or LOOT_COUNT > 2 then
-			local numLootItems = GetNumLootItems()
-			for slotNumber = 1, numLootItems do
-				local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
-				if slotNumber > 1 then
-					local guid1, quant1, guid2, quant2 = GetLootSourceInfo(slotNumber)
-					print("LOOT_READY: ", guid1, quant1, guid2, quant2)
-					local lootLink = GetLootSlotLink(slotNumber)
-					local newItem = Item:CreateFromItemLink(lootLink)
-					newItem:ContinueOnItemLoad(function()
-						local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
-						local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
-						print("LOOT_READY: ", item.name, item.price)
-						self:AddToEventLoot(item, slotNumber, numLootItems)				
-					end)
-				else
-					local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
-					print("LOOT_READY: ", item.name, item.price)
-					self:AddToEventLoot(item, slotNumber, numLootItems)
-				end
+	if CURRENT_EVENT then
+		if CURRENT_EVENT.state == EVENT_STATE.ACTIVE then
+			TheArtfulDodgersLedger:AddLootReadyItems()
+		elseif CURRENT_EVENT.state = EVENT_STATE.MARK_DEAD then
+			LOOT_COUNT = LOOT_COUNT + 1
+			if LOOT_COUNT > 2 then
+				TheArtfulDodgersLedger:AddLootReadyItems()
 			end
+		end
+	end
+end
+
+function TheArtfulDodgersLedger:AddLootReadyItems()
+	local numLootItems = GetNumLootItems()
+	for slotNumber = 1, numLootItems do
+		local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
+		local guid1, quant1, guid2, quant2 = GetLootSourceInfo(slotNumber)
+		if slotNumber > 1 then
+			print("LOOT_READY: ", guid1, quant1, guid2, quant2)
+			local lootLink = GetLootSlotLink(slotNumber)
+			local newItem = Item:CreateFromItemLink(lootLink)
+			newItem:ContinueOnItemLoad(function()
+				local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
+				local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
+				print("LOOT_READY: ", item.name, item.price)
+				self:AddToEventLoot(item, slotNumber, numLootItems)				
+			end)
+		else
+			local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
+			print("LOOT_READY: ", item.name, item.price)
+			self:AddToEventLoot(item, slotNumber, numLootItems)
 		end
 	end
 end
