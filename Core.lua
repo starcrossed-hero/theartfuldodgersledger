@@ -108,6 +108,7 @@ function TheArtfulDodgersLedger:OnEnable()
 	self:RegisterEvent("UI_ERROR_MESSAGE")
 	self:RegisterEvent("LOOT_READY")
 	self:RegisterEvent("ITEM_LOCK_CHANGED")
+	self:RegisterEvent("LOOT_SLOT_CLEARED")
 end
 
 --hooksecurefunc("ContainerFrameItemButton_OnClick", function(self, button)
@@ -206,24 +207,45 @@ function TheArtfulDodgersLedger:LOOT_READY(autoloot)
 	end
 end
 
+function TheArtfulDodgersLedger:LOOT_SLOT_CLEARED(slotNumber)
+	local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
+	local guid1, quant1, guid2, quant2 = GetLootSourceInfo(slotNumber)
+	if LootSlotIsCoin(slotNumber) == true then
+		print("LOOT_SLOT_CLEARED: ", guid1, quant1, guid2, quant2, " source: ", CURRENT_EVENT.mark.guid)
+		print("CanLootUnit: ", CanLootUnit(CURRENT_EVENT.mark.guid), " state: ", CURRENT_EVENT.state)
+		local lootLink = GetLootSlotLink(slotNumber)
+		local newItem = Item:CreateFromItemLink(lootLink)
+		newItem:ContinueOnItemLoad(function()
+			local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
+			local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
+			print("LOOT_SLOT_CLEARED: ", item.name, item.price)
+			--self:AddToEventLoot(item, slotNumber, numLootItems)				
+		end)
+	elseif LootSlotIsItem(slotNumber) == true then
+		local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
+		print("LOOT_SLOT_CLEARED: ", item.name, item.price)
+		--self:AddToEventLoot(item, slotNumber, numLootItems)
+	end
+end
+
 function TheArtfulDodgersLedger:AddLootReadyItems()
 	local numLootItems = GetNumLootItems()
 	for slotNumber = 1, numLootItems do
 		local lootIcon, lootName, lootQuantity, currencyID, lootQuality, locked, isQuestItem, questID, isActive = GetLootSlotInfo(slotNumber)
 		local guid1, quant1, guid2, quant2 = GetLootSourceInfo(slotNumber)
-		if slotNumber > 1 then
-			print("LOOT_READY: ", guid1, quant1, guid2, quant2)
+		if LootSlotIsCoin(slotNumber) == true then
+			--print("LOOT_READY: ", guid1, quant1, guid2, quant2)
 			local lootLink = GetLootSlotLink(slotNumber)
 			local newItem = Item:CreateFromItemLink(lootLink)
 			newItem:ContinueOnItemLoad(function()
 				local itemName, itemLink, _, _, _, itemType, itemSubType, _, _, itemIcon, itemSellPrice, itemClassID, itemSubClassID, bindType, _, _, isCraftingReagent = GetItemInfo(lootLink)
 				local item = {name=lootName, link=lootLink, quantity=lootQuantity, quality=lootQuality, icon=itemIcon, price=itemSellPrice}
-				print("LOOT_READY: ", item.name, item.price)
+				--print("LOOT_READY: ", item.name, item.price)
 				self:AddToEventLoot(item, slotNumber, numLootItems)				
 			end)
-		else
+		elseif LootSlotIsItem(slotNumber) == true then
 			local item = {name=CURRENCY_STRING, link=CURRENCY_LINK, quantity=1, quality=1, icon=CURRENCY_ICON_ID, price=self:GetCopperFromLootName(lootName)}
-			print("LOOT_READY: ", item.name, item.price)
+			--print("LOOT_READY: ", item.name, item.price)
 			self:AddToEventLoot(item, slotNumber, numLootItems)
 		end
 	end
