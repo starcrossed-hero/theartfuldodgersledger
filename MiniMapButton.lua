@@ -30,18 +30,14 @@ local ldbDataSourceDisplay = CreateFrame("frame")
 ldbDataSourceDisplay:SetScript("OnUpdate", function(self, elapsed)
     UPDATE_FREQUENCY = UPDATE_FREQUENCY - elapsed
     if UPDATE_FREQUENCY <= 0 then
-        UPDATE_FREQUENCY = 2
+        UPDATE_FREQUENCY = 10
         if minimap.db then
             local duration = time() - minimap.db.stats.session.start
             dataObject.text = string.format(STATUS_STRING_FORMAT, 
                 GetCoinTextureString(minimap.db.stats.session.copper), 
                 minimap.db.stats.session.marks, 
-                GetCoinTextureString(
-                    addon:CalculateAverageCopperPerMark(minimap.db.stats.session.copper, minimap.db.stats.session.marks)
-                ),
-                GetCoinTextureString(
-                    addon:CalculateAverageCopperPerHour(minimap.db.stats.session.copper, minimap.db.stats.session.duration)
-                )
+                GetCoinTextureString(addon:GetSessionCopperPerHour()),
+                GetCoinTextureString(addon:GetSessionCopperPerMark())
             )
             minimap.db.stats.session.duration = duration
         end

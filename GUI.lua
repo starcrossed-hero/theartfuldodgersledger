@@ -86,7 +86,9 @@ function gui:OnEnable()
 end
 
 function gui:ShowFrame()   
-	if gui.db.settings.gui.visible or not gui.db.settings.gui.visible then
+	if gui.db.settings.gui.visible == false then
+        
+        print("visible: ", gui.db.settings.gui.visible)
 
 		gui.db.settings.gui.visible = true
 
@@ -171,6 +173,9 @@ function gui:CreateScrollContainer()
 	scrollcontainer:SetLayout("Fill")
 	scrollcontainer:SetPoint("TOP")
 	scrollcontainer:SetHeight(400)
+    scrollcontainer:SetCallback("MoveScroll", function(widget)
+        print("scroll")
+    end)
 	return scrollcontainer
 end
 
@@ -198,8 +203,47 @@ function gui:CreateSettingsDisplay()
 	resetAllButton:SetWidth(200)
 	resetAllButton:SetCallback("OnClick", function() addon:ResetAll() end)
 	settingsContainer:AddChild(resetAllButton)
+    
+    settingsContainer:AddChild(gui:CreateUpdateIntervalSlider())
+    
+    local worldMapCheckbox = AceGUI:Create("CheckBox")
+    worldMapCheckbox:SetType("checkbox")
+    worldMapCheckbox:SetLabel("World Map Display")
+    worldMapCheckbox:SetDescription("Shows zone loot stats on world map")
+    if gui.db.settings.gui.worldMapDisplay then
+        worldMapCheckbox:SetValue(1)
+    else
+       worldMapCheckbox:SetValue(0) 
+    end
+    worldMapCheckbox:SetCallback("OnValueChanged", function(_, event, value)
+        gui.db.settings.gui.worldMapDisplay = value
+    end)
+    
+    settingsContainer:AddChild(worldMapCheckbox)
 
 	return settingsContainer
+end
+
+function gui:CreateUpdateIntervalSlider()
+    local container = AceGUI:Create("InlineGroup")
+    container:SetTitle("Update Interval")
+	container:SetFullWidth(false)
+	container:SetLayout("Flow")
+    
+    --local label = AceGUI:Create("Label")
+	--:SetText("Update Interval (in seconds)")
+	--container:AddChild(label)
+    
+    local updateIntervalSlider = AceGUI:Create("Slider")
+    updateIntervalSlider:SetValue(gui.db.settings.stats.updateInterval)
+    updateIntervalSlider:SetSliderValues(5, 300, 5)
+    updateIntervalSlider:SetLabel("Seconds")
+    updateIntervalSlider:SetCallback("OnMouseUp", function(event, value) 
+        gui.db.settings.stats.updateInterval = updateIntervalSlider:GetValue()
+    end)
+    container:AddChild(updateIntervalSlider)
+    
+    return container
 end
 
 function gui:CreateStatsDisplay()
@@ -207,18 +251,18 @@ function gui:CreateStatsDisplay()
 	container:SetFullWidth(true)
 	container:SetLayout("Flow")
 	local globalLabel = AceGUI:Create("Label")
-	globalLabel:SetText(string.format(LOOT_TOTAL_STRING, GetCoinTextureString(gui.db.stats.total.copper)))
+	globalLabel:SetText(string.format(LOOT_TOTAL_STRING, GetCoinTextureString(addon:GetTotalCopperFromHistory())))
 	container:AddChild(globalLabel)
 	
 	local sessionLabel = AceGUI:Create("Label")
-	sessionLabel:SetText(string.format(LOOT_MARKS_STRING, gui.db.stats.total.marks))
+	sessionLabel:SetText(string.format(LOOT_MARKS_STRING, #gui.db.history))
 	container:AddChild(sessionLabel)
 	
 	local averageLabel = AceGUI:Create("Label")
-	averageLabel:SetText(string.format(LOOT_AVERAGE_STRING, GetCoinTextureString(addon:GetGlobalAverage())))
+	averageLabel:SetText(string.format(LOOT_AVERAGE_STRING, GetCoinTextureString(addon:GetTotalCopperPerMark())))
 	container:AddChild(averageLabel)
 	local zoneAverageLabel = AceGUI:Create("Label")
-	zoneAverageLabel:SetText("Current Zone: "..GetRealZoneText().." Average Copper: "..GetCoinTextureString(TheArtfulDodgersLedger:GetAverageCopperPerMarkForZone(GetRealZoneText())))
+	zoneAverageLabel:SetText("Current Zone: "..GetRealZoneText().." Average Copper: "..GetCoinTextureString(TheArtfulDodgersLedger:GetZoneCopperPerMark(GetRealZoneText())))
 	container:AddChild(zoneAverageLabel)
 
 	return container
