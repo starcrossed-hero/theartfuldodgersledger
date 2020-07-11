@@ -22,20 +22,20 @@ The ledger supports Titan Panel as a standard plug-in to display pick pocket sta
 
 The ledger provides access to pick pocket statistics per zone right from the World Map.
 
-Current Zone
+* The current zone map
 ![Current Zone Map](screenshots/zoneMap.png?raw=true "Current Zone Map")
 
-Continent
+* The continent map
 ![Continent Map](screenshots/continentMap.png?raw=true "Continent Map")
 
-Continent while mouse hovers another zone
+* The continent map while hovering any other zone
 ![Continent Map with Mouse Hover](screenshots/continentMapHover.png?raw=true "Continent Map with Mouse Hover")
 
 ### Configurable Settings
 
 Access to most settings provided through the UI.
 
-![Alt text](screenshots/settings.png?raw=true "Settings UI")
+![Settings](screenshots/settings.png?raw=true "Settings UI")
 
 
 
