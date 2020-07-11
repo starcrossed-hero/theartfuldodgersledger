@@ -1,21 +1,23 @@
-local addon = LibStub("AceAddon-3.0"):GetAddon("TheArtfulDodgersLedger")
-local gui = addon:GetModule("GUI")
-local minimap = addon:NewModule("MiniMapButton")
+local addon = LibStub("AceAddon-3.0"):GetAddon("ArtfulDodger")
+local gui = addon:GetModule("ArtfulDodger_UI")
+local minimap = addon:NewModule("ArtfulDodger_MiniMap")
 local button = LibStub("LibDBIcon-1.0")
 
-local UPDATE_FREQUENCY = 2
+local UPDATE_FREQUENCY = 5
+local UPDATE_TIMER = 0
 
 local GOLD = "|cffeec300"
 local WHITE = "|cffFFFFFF"
-local STATUS_STRING_FORMAT = GOLD.."Coin:|r "..WHITE.."%s|r  "..GOLD.."Marks:|r "..WHITE.."%d|r   "..GOLD.."Avg/Hr:|r  "..WHITE.."%s|r"..GOLD.."  Avg/Mk:|r  "..WHITE.."%s|r"
+local STATUS_STRING_FORMAT = GOLD.."Marks:|r "..WHITE.."%d|r   "..GOLD.."Coin:|r "..WHITE.."%s|r  "..GOLD.."Per Hour:|r  "..WHITE.."%s|r"..GOLD.."  Per Mark:|r  "..WHITE.."%s|r"
+--local STATUS_STRING_FORMAT = WHITE.." %s|r"..GOLD.."/hour|r  "..WHITE.."%s|r"..GOLD.."/mark|r"
 
 local dataObject = LibStub:GetLibrary("LibDataBroker-1.1"):NewDataObject("The Artful Dodger's Ledger", {
     type = "data source", 
     icon = "Interface\\Icons\\INV_Misc_Bag_11", 
     text = string.format(STATUS_STRING_FORMAT, 
-        GetCoinTextureString(0), 
-        0, 
+        0,
         GetCoinTextureString(0),
+        GetCoinTextureString(0), 
         GetCoinTextureString(0)
     )
 })
@@ -28,14 +30,14 @@ end
 
 local ldbDataSourceDisplay = CreateFrame("frame") 
 ldbDataSourceDisplay:SetScript("OnUpdate", function(self, elapsed)
-    UPDATE_FREQUENCY = UPDATE_FREQUENCY - elapsed
-    if UPDATE_FREQUENCY <= 0 then
-        UPDATE_FREQUENCY = 10
+    UPDATE_TIMER = UPDATE_TIMER - elapsed
+    if UPDATE_TIMER <= 0 then
+        UPDATE_TIMER = UPDATE_FREQUENCY
         if minimap.db then
             local duration = time() - minimap.db.stats.session.start
             dataObject.text = string.format(STATUS_STRING_FORMAT, 
-                GetCoinTextureString(minimap.db.stats.session.copper), 
-                minimap.db.stats.session.marks, 
+                minimap.db.stats.session.marks,
+                GetCoinTextureString(minimap.db.stats.session.copper),
                 GetCoinTextureString(addon:GetSessionCopperPerHour()),
                 GetCoinTextureString(addon:GetSessionCopperPerMark())
             )
